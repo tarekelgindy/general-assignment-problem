@@ -62,7 +62,7 @@ def augmenting_path(G,demand_nodes,assignments):
     return reduced_elements
 
 G = nx.DiGraph()
-node_demand = {'a':4,'b':4,'c':4,'d':4,'e':10}#,'f':10,'g':10,'h':10}
+node_demand = {'a':4,'b':4,'c':4,'d':4,'e':4}#,'f':10,'g':10,'h':10}
 total_demand = 0
 total_supply = 0
 max_demand = 0
@@ -149,8 +149,6 @@ for i in node_demand:
             break
         if flow_dict[i][j] == node_demand[i]:
             assignments[i] = j
-            for e in G.edges(i):
-                G.remove_edge(e[0],e[1])
             break
     if i not in assignments:
         for j in flow_dict[i]:
