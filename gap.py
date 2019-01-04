@@ -1,6 +1,5 @@
 import networkx as nx
 
-
 def adjust_graph(G,path,demand_nodes,assignments):
     all_edges = G.edges()
     edge_sizes = set()
