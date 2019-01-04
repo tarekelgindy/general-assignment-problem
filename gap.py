@@ -35,12 +35,14 @@ def adjust_graph(G,path,demand_nodes,assignments):
         if e[0] in demand_nodes:
             assignments[e[0]] = e[1]
             cnt+=1
-            for tr in G.edges(e[0]):
+            removable_edges = G.edges(e[0])
+            for tr in removable_edges:
                 G.remove_edge(tr[0],tr[1])
         if e[1] in demand_nodes:
             assignments[e[1]] = e[0]
             cnt+=1
-            for tr in G.edges(e[0]):
+            removable_edges = G.edges(e[1])
+            for tr in removable_edges:
                 G.remove_edge(tr[0],tr[1])
     return cnt
 
