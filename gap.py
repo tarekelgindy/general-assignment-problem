@@ -1,16 +1,5 @@
 import networkx as nx
 
-def gcd(a,b):
-    if b == 0:
-        return a
-    return a % b
-
-def gcd_list(arr):
-    st = sorted(list(arr))
-    result = st[0]
-    for i in range(1,len(st)):
-        result = gcd(result,st[i])
-    return result
 
 def adjust_graph(G,path,demand_nodes,assignments):
     all_edges = G.edges()
@@ -21,7 +10,7 @@ def adjust_graph(G,path,demand_nodes,assignments):
         if not e in all_weights:
             e = (e[1],e[0])
         edge_sizes.add(all_weights[e])
-    min_edge = gcd_list(edge_sizes)
+    min_edge = min(edge_sizes)
 
     cycle_addition = []
     cycle_subtraction = []
@@ -94,7 +83,7 @@ if total_demand != total_supply:
 
 for i in connection_list:
     for j in connection_list[i]:
-        G.add_edge(i,j,weight=1,capacity = node_demand[i])
+        G.add_edge(i,j,weight=node_supply[j]*-1,capacity = node_demand[i]) #may help get more integer solutions?
 
 if total_demand< total_supply:
     for i in node_supply:
