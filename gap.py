@@ -62,12 +62,13 @@ def augmenting_path(G,demand_nodes,assignments):
     return reduced_elements
 
 G = nx.DiGraph()
-node_demand = {'a':4,'b':4,'c':4,'d':4}
+node_demand = {'a':4,'b':4,'c':4,'d':4,'e':10}#,'f':10,'g':10,'h':10}
 total_demand = 0
 total_supply = 0
 max_demand = 0
-node_supply = {'x':15,'y':5,'z':5}
-connection_list = {'a':['x','y'], 'b':['x','y'],'c':['y','z'], 'd':['y','z']}
+max_supply = 0
+node_supply = {'x':55,'y':5,'z':5}#,'zz':10}
+connection_list = {'a':['x','y'], 'b':['x','y'],'c':['y','z'], 'd':['y','z']}#,'f':['zz'],'g':['zz'],'h':['zz']}
 
 for i in node_demand:
     G.add_node(i,demand=node_demand[i]*-1)
@@ -77,26 +78,53 @@ for i in node_demand:
 for i in node_supply:
     G.add_node(i,demand=node_supply[i])
     total_supply+=node_supply[i]
-if total_demand != total_supply:
-    G.add_node('slack',demand = total_demand-total_supply)
+    if node_supply[i] > max_supply:
+        max_supply = node_supply[i]
 
+# Supply slack used if there is too much demand and not enough supply. Represents infeasibility
+# Demand slack used if there is more supply than demand. This does not constitue infeasibility, but availability in the supply nodes
+        
+if total_supply>total_demand:
+    G.add_node('demand_slack',demand = -1*(total_demand+total_supply)+ total_demand - total_supply) #Add total_demand + total_supply incase all nodes disconnected. This means supply_slack is feeding all the supply nodes and demand_slack is feeding all the demand nodes
+    G.add_node('supply_slack',demand = total_demand+total_supply )
+else:
+    G.add_node('demand_slack',demand = -1*(total_demand+total_supply) )
+    G.add_node('supply_slack',demand = (total_demand+total_supply)- total_supply + total_demand)
+
+G.add_edge('demand_slack','supply_slack',weight = -1*max_supply,capacity=total_demand+total_supply) #might this cause numerical issues?
+print(total_supply,total_demand)
+print(nx.get_node_attributes(G,'demand'))
 for i in connection_list:
     for j in connection_list[i]:
         G.add_edge(i,j,weight=node_supply[j]*-1,capacity = node_demand[i]) #may help get more integer solutions?
 
-if total_demand< total_supply:
-    for i in node_supply:
-        G.add_edge('slack',i, weight = 1, capacity = total_supply-total_demand)
+for i in node_supply:
+    G.add_edge('demand_slack',i, weight = 10, capacity = node_supply[i])
 
-if total_demand> total_supply:
-    for i in node_supply:
-        G.add_edge(i,'slack', weight = 1, capacity = total_demand-total_supply)
+for j in node_demand:
+    G.add_edge(j,'supply_slack', weight = 10, capacity = node_demand[j]) #Costs of all real edges are negative
+
+
+#G.add_node('unassigned',demand=0)
+#for i in node_demand:
+#    G.add_edge(i,'unassigned',weight=10000,capacity=node_demand[i])
+#for j in node_supply:
+#    G.add_edge('unassigned',j,weight=10000,capacity=node_supply[j])
+
 flow_cost,flow_dict = nx.network_simplex(G)
+
+print(flow_dict)
+supply_slack = {'supply_slack':{}}
+demand_slack = {'demand_slack':flow_dict['demand_slack']}
 
 print("Fractional assignments:")
 for i in sorted(node_demand.keys()):
     print(i,flow_dict[i])
-print("\n")
+    if 'supply_slack' in flow_dict[i]: #If there's too much demand
+        supply_slack['supply_slack'][i] =flow_dict[i]['supply_slack']
+print(supply_slack)
+print(demand_slack)
+print()
 
 assignments = {} #map demands to supplies
 simple_assignments = {} 
@@ -107,19 +135,27 @@ for i in node_demand.keys():
         if flow_dict[i][j] > max_assignment:
             max_assignment = flow_dict[i][j]
             simple_element = j
-    simple_assignments[i] = simple_element
+    if simple_element == 'supply_slack':
+        simple_assignments[i] = 'unassigned'
+    else:
+        simple_assignments[i] = simple_element
 
 
 G2 = nx.Graph()
 for i in node_demand:
     for j in flow_dict[i]:
+        if j== 'supply_slack' and flow_dict[i][j] >0:
+            assignments[i] = 'unassigned'
+            break
         if flow_dict[i][j] == node_demand[i]:
             assignments[i] = j
             for e in G.edges(i):
                 G.remove_edge(e[0],e[1])
+            break
     if i not in assignments:
         for j in flow_dict[i]:
-            G2.add_edge(i,j, weight=flow_dict[i][j]) #for simplicity keep the edges integer
+            if j!='supply_slack':
+                G2.add_edge(i,j, weight=flow_dict[i][j]) #for simplicity keep the edges integer
 
 while 1:
     reduced = augmenting_path(G2,node_demand,assignments)
@@ -141,8 +177,11 @@ for i in node_supply.keys():
 
 print("Augmentation assignment:")
 for i in node_demand.keys():
-    allocation_amounts[assignments[i]] += node_demand[i]
-    print(i+ "-> "+assignments[i])
+    if assignments[i] == 'unassigned':
+        print(i+ " not assigned")
+    else:
+        allocation_amounts[assignments[i]] += node_demand[i]
+        print(i+ "-> "+assignments[i])
 for i in node_supply.keys():
     if node_supply[i] !=0:
         print(i+" at "+str(allocation_amounts[i]) + " ("+str(100*round(allocation_amounts[i]/float(node_supply[i]),3))+"%)")
@@ -150,8 +189,11 @@ for i in node_supply.keys():
 print("\n")
 print("Simple assignment:")
 for i in node_demand.keys():
-    simple_allocation_amounts[assignments[i]] += node_demand[i]
-    print(i+ "-> "+assignments[i])
+    if simple_assignments[i] == 'unassigned':
+        print(i+ " not assigned")
+    else:
+        simple_allocation_amounts[simple_assignments[i]] += node_demand[i]
+        print(i+ "-> "+simple_assignments[i])
 for i in node_supply.keys():
     if node_supply[i] !=0:
         print(i+" at "+str(simple_allocation_amounts[i]) + " ("+str(100*round(simple_allocation_amounts[i]/float(node_supply[i]),3))+"%)")
