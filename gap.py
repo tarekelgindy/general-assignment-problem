@@ -1,13 +1,21 @@
 import networkx as nx
 
-def adjust_graph(G,path,demand_nodes,adjusted_supplies,assignments):
+def adjust_graph(G,path,demand_nodes,assignments):
     all_edges = G.edges()
     edge_sizes = set()
+    upper_bounds = []
     for i in range(len(path)):
         edge_sizes.add(G.edges[path[i]]['weight'])
+        upper_bound = None
+        if path[i][0] in demand_nodes:
+            upper_bound = demand_nodes[path[i][0]]
+        if path[i][1] in demand_nodes:
+            upper_bound = demand_nodes[path[i][1]]
+
+        upper_bounds.append(upper_bound)
+        edge_sizes.add(upper_bound - G.edges[path[i]]['weight'])
     min_edge = min(edge_sizes)
 
-    #import pdb;pdb.set_trace()
     cycle_addition = []
     cycle_subtraction = []
     for i in range(len(path)):
@@ -15,46 +23,39 @@ def adjust_graph(G,path,demand_nodes,adjusted_supplies,assignments):
         cycle_addition.append(edge_weight + ((-1)**i)*min_edge)
         cycle_subtraction.append(edge_weight + ((-1)**(i+1))*min_edge)
 
+    #import pdb;pdb.set_trace()
     nodes_to_remove = set()
-    use_subtraction = None #Lock in which augmentation we're using once we find a node to remove
     new_weights = []
     for i in range(len(path)):
-        if cycle_subtraction[i] == 0 and (use_subtraction is None or use_subtraction):
+        if (cycle_subtraction[i] == 0 or cycle_subtraction[i] == upper_bounds[i]):
             new_weights = cycle_subtraction
             break
-        if cycle_addition[i] == 0 and (use_subtraction is None or not use_subtraction):
+        if (cycle_addition[i] == 0 or cycle_addition[i] == upper_bounds[i]):
             new_weights = cycle_addition
             break
-            use_subtraction = False
+    cnt = 0
     for i in range(len(path)):
         G.edges[path[i]]['weight'] = new_weights[i]
+        print(path[i])
         if new_weights[i] ==0:
-            nodes_to_remove.add(path[i])
-        if path[i][0] in demand_nodes and demand_nodes[path[i][0]] == new_weights[i] ==0 or path[i][1] in demand_nodes and demand_nodes[path[i][1]] == new_weights[i]:
-            nodes_to_remove.add(path[i])
+            G.remove_edge(*path[i])
+            cnt+=1
+        if new_weights[i] == upper_bounds[i]:
+            cnt+=1
+            G.remove_edge(*path[i])
+            if path[i][0] in demand_nodes:
+                assignments[path[i][0]] = path[i][1]
+            if path[i][1] in demand_nodes:
+                assignments[path[i][1]] = path[i][0]
 
-    cnt = 0
-    for e in nodes_to_remove:
-        if e[0] in demand_nodes:
-            assignments[e[0]] = e[1]
-            cnt+=1
-            removable_edges = list(G.edges(e[0]))
-            for tr in removable_edges:
-                G.remove_edge(tr[0],tr[1])
-        if e[1] in demand_nodes:
-            assignments[e[1]] = e[0]
-            cnt+=1
-            removable_edges = list(G.edges(e[1]))
-            for tr in removable_edges:
-                G.remove_edge(tr[0],tr[1])
     return cnt
 
-def augmenting_path(G,demand_nodes,adjusted_supplies, assignments):
+def augmenting_path(G,demand_nodes, assignments):
     reduced_elements = 0
     while 1:
         try:
             cycle = nx.find_cycle(G) #Done arbitrarily. Maybe better to select one specifically?
-            reduced_elements+=adjust_graph(G,cycle,demand_nodes,adjusted_supplies, assignments)
+            reduced_elements+=adjust_graph(G,cycle,demand_nodes, assignments)
             print("Cycle: "+str(cycle))
         except nx.NetworkXNoCycle:
             break
@@ -62,7 +63,7 @@ def augmenting_path(G,demand_nodes,adjusted_supplies, assignments):
         if G.degree(i) == 1:
             path = list(nx.dfs_edges(G,source=i))
             print("Path "+str(path))
-            reduced_elements+=adjust_graph(G,path,demand_nodes,adjusted_supplies, assignments)
+            reduced_elements+=adjust_graph(G,path,demand_nodes, assignments)
             break
     return reduced_elements
 
@@ -74,6 +75,7 @@ max_demand = 0
 max_supply = 0
 node_supply = {'x':55,'y':5,'z':5}#,'zz':10}
 connection_list = {'a':['x','y'], 'b':['x','y'],'c':['y','z'], 'd':['y','z']}#,'f':['zz'],'g':['zz'],'h':['zz']}
+
 
 for i in node_demand:
     G.add_node(i,demand=node_demand[i]*-1)
@@ -147,9 +149,6 @@ for i in node_demand.keys():
 
 
 G2 = nx.Graph()
-adjusted_supplies = {}
-for i in node_supply:
-    adjusted_supplies[i] = node_supply[i]
 for i in node_demand:
     for j in flow_dict[i]:
         if j== 'supply_slack' and flow_dict[i][j] >0:
@@ -162,10 +161,9 @@ for i in node_demand:
         for j in flow_dict[i]:
             if j!='supply_slack' and flow_dict[i][j]!=0:
                 G2.add_edge(i,j, weight=flow_dict[i][j]) #for simplicity keep the edges integer
-                adjusted_supplies[j] = adjusted_supplies[j]-flow_dict[i][j] #i.e. reduce the capacity of the node
 
 while 1:
-    reduced = augmenting_path(G2,node_demand,adjusted_supplies,assignments)
+    reduced = augmenting_path(G2,node_demand,assignments)
     if reduced == 0:
         break
 
